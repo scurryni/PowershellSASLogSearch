@@ -1,0 +1,18 @@
+1                                                          The SAS System                      07:11 Friday, May 30, 2025
+
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M7)
+
+1          libname stage "D:\SASData\stage";
+NOTE: Libref STAGE was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: D:\SASData\stage
+
+2          data stage.accounts;
+3              set raw.accounts_in;
+4          run;
+
+ERROR: File RAW.ACCOUNTS_IN.DATA does not exist.
+NOTE: The SAS System stopped processing this step because of errors.
+
+NOTE: The SAS System used:
+      real time           0.09 seconds

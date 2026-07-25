@@ -1,0 +1,42 @@
+1                                                          The SAS System                      02:03 Tuesday, June 3, 2025
+
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M7)
+
+1          libname mart "D:\SASData\mart";
+ERROR: Library MART does not exist.
+
+2          data mart.summary;
+3              set stage.enriched;
+4              region_cd = put(region, $3.);
+5              open_dt   = input(open_date_txt, yymmdd10.);
+6          run;
+
+ERROR: Libref MART is not assigned.
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      4:25
+NOTE: Invalid data for open_date_txt in line 5 12-21.
+RULE:     ----+----1----+----2----+----3----+----4
+1027      2025-13-45
+open_date_txt=2025-13-45 open_dt=. _ERROR_=1 _N_=1027
+NOTE: The SAS System stopped processing this step because of errors.
+WARNING: The data set MART.SUMMARY may be incomplete.  When this step was stopped there were 0
+         observations and 0 variables.
+
+7          proc means data=stage.enriched noprint;
+8              class region;
+9              var util_pct;
+10             output out=stats mean=avg_util;
+11         run;
+
+WARNING: The variable util_pct is uninitialized.
+ERROR: Invalid argument to function INPUT at line 5 column 25.
+NOTE: The SAS System stopped processing this step because of errors.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+
+ERROR: Errors printed on page 1.
+
+NOTE: The SAS System used:
+      real time           0.31 seconds
+      cpu time            0.15 seconds

@@ -1,0 +1,36 @@
+1                                                          The SAS System                      06:42 Wednesday, June 4, 2025
+
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M7)
+
+1          data recon.matched;
+2              merge recon.ledger (in=a) recon.gl (in=b);
+3              by account_id;
+4              if a and b;
+5          run;
+
+ERROR: BY variables are not properly sorted on data set RECON.GL.
+account_id=88014 FIRST.account_id=1 LAST.account_id=1 _ERROR_=1 _N_=4471
+NOTE: The SAS System stopped processing this step because of errors.
+
+6          proc means data=recon.amounts;
+7              by product_cd;
+8              var amount;
+9          run;
+
+WARNING: The data set RECON.MATCHED may be incomplete.
+NOTE: There were 2 repeats of BY values.
+NOTE: At least one W.D format was too small for the number to be printed. The decimal may be
+      shifted by the "BEST" format.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.44 seconds
+
+10         data _null_;
+11             infile cards;
+12             input id name $ amount;
+13             cards;
+NOTE: LOST CARD.
+id=9001 name=widget amount=. _ERROR_=1 _N_=3
+NOTE: The SAS System stopped processing this step because of errors.
+
+NOTE: The SAS System used:
+      real time           0.77 seconds

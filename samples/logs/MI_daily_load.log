@@ -1,0 +1,68 @@
+1                                                          The SAS System                      07:14 Monday, June 2, 2025
+
+NOTE: Copyright (c) 2016 by SAS Institute Inc., Cary, NC, USA.
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M7)
+NOTE: This session is executing on the X64_10PRO  platform.
+
+NOTE: AUTOEXEC processing beginning; file is D:\SASConfig\Lev1\autoexec.sas.
+
+1          %let run_date = %sysfunc(today(), yymmdd10.);
+2          libname stage "D:\SASData\stage";
+NOTE: Libref STAGE was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: D:\SASData\stage
+
+3          data stage.accounts;
+4              set raw.accounts_in;
+5              balance_num = balance;
+6              if tier = . then tier = 0;
+7          run;
+
+NOTE: Character values have been converted to numeric values at the places given by:
+      (Line):(Column).
+      5:26
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      12 at 6:19
+NOTE: There were 148206 observations read from the data set RAW.ACCOUNTS_IN.
+NOTE: The data set STAGE.ACCOUNTS has 148206 observations and 31 variables.
+NOTE: DATA statement used (Total process time):
+      real time           2.41 seconds
+      cpu time            1.98 seconds
+
+8          proc sort data=stage.accounts;
+9              by account_id;
+10         run;
+
+NOTE: There were 148206 observations read from the data set STAGE.ACCOUNTS.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.88 seconds
+
+11         data stage.enriched;
+12             merge stage.accounts (in=a) stage.limits (in=b);
+13             by account_id;
+14             util_pct = exposure / limit_amt;
+15         run;
+
+NOTE: Variable limit_amt is uninitialized.
+NOTE: Division by zero detected at line 14 column 32.
+NOTE: Mathematical operations could not be performed at the following places.
+      The results of the operations have been set to missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      37 at 14:32
+NOTE: The data set STAGE.ENRICHED has 148206 observations and 44 variables.
+
+16         proc export data=stage.enriched
+17             outfile="D:\SASData\out\enriched.csv"
+18             dbms=csv replace;
+19         run;
+
+NOTE: The file "D:\SASData\out\enriched.csv" is:
+      Filename=D:\SASData\out\enriched.csv,
+      RECFM=V,LRECL=32767
+
+NOTE: 148207 records were written to the file.
+NOTE: PROCEDURE EXPORT used (Total process time):
+      real time           4.12 seconds
+
+NOTE: SAS Institute Inc., SAS Campus Drive, Cary, NC USA 27513-2414

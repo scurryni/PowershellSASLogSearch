@@ -1,0 +1,33 @@
+1                                                          The SAS System                      06:00 Monday, June 2, 2025
+
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M7)
+
+1          libname recon "D:\SASData\recon";
+NOTE: Libref RECON was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: D:\SASData\recon
+
+2          proc sql noprint;
+3              create table recon.breaks as
+4              select a.account_id, a.balance, b.balance as gl_balance
+5              from recon.ledger a
+6              inner join recon.gl b
+7                  on a.account_id = b.account_id
+8              where abs(a.balance - b.balance) > 0.01;
+9          quit;
+
+NOTE: Table RECON.BREAKS created, with 0 rows and 3 columns.
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           1.07 seconds
+      cpu time            0.94 seconds
+
+10         proc print data=recon.breaks noobs;
+11         run;
+
+NOTE: No observations in data set RECON.BREAKS.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.01 seconds
+
+NOTE: The SAS System used:
+      real time           1.19 seconds
+      cpu time            1.02 seconds
