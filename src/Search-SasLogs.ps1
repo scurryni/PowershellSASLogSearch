@@ -52,24 +52,10 @@
     log flooding the results.
 
 .PARAMETER Extension
-    Enforced file extension, default '.log'. Set to '' to disable the check.
-    Guards against the Windows 8.3 quirk where -Filter '*.log' also returns
-    '.log1' and '.logs'.
-
-.PARAMETER Filter
-    Raw wildcard handed to the filesystem provider, default '*.log'. This is the
-    cheapest filter available — it narrows the enumeration before any file is
-    opened — but it is also the bluntest, and two things override it:
-
-      - A single -Include replaces it outright. Passing both is not an error and
-        raises no warning; -Include simply wins.
-      - -Extension is re-checked afterwards, so a -Filter that widens past '.log'
-        matches nothing until -Extension is relaxed too:
-            -Filter '*.txt'                 -> no files
-            -Filter '*.txt' -Extension ''   -> works
-
-    Prefer -Include for day-to-day narrowing. Reach for -Filter only when the
-    estate does not use the '.log' extension at all.
+    File extension to sweep, default '.log'. Drives both the wildcard handed to
+    the filesystem and a re-check of each file afterwards — the re-check guards
+    against the Windows 8.3 quirk where the wildcard '*.log' also returns
+    '.log1' and '.logs'. Set to '' to sweep every file regardless of extension.
 
 .PARAMETER Encoding
     Text encoding of the logs: UTF8 (default), Latin1, ASCII, Unicode, Default.
@@ -128,7 +114,6 @@ param(
     [int]$MaxFiles,
     [switch]$Newest,
     [string]$Extension = '.log',
-    [string]$Filter = '*.log',
     [switch]$Recurse,
 
     # ---- matching -----------------------------------------------------------
@@ -202,7 +187,11 @@ $enc = switch ($Encoding) {
 # ---------------------------------------------------------------------------
 # 2. Select the files
 # ---------------------------------------------------------------------------
-$effectiveFilter = $Filter
+# Provider-level wildcard: the cheapest narrowing available, since it is applied
+# before any file is opened. Derived from -Extension rather than exposed as its
+# own parameter, so the two can never contradict each other.
+$effectiveFilter = if ($Extension) { "*$Extension" } else { '*' }
+
 if ($Include -and $Include.Count -eq 1) {
     $effectiveFilter = if ($Include[0] -match '\.[^.\\/*?]+$' -and $Include[0] -match '[*?]') {
         $Include[0]
@@ -217,8 +206,8 @@ if ($Recurse) { $gciArgs.Recurse = $true }
 Write-Verbose "Enumerating '$Path' with filter '$effectiveFilter'"
 $files = Get-ChildItem @gciArgs
 
-# Windows matches 8.3 short names too, so -Filter '*.log' can return '.log1'
-# and '.logs'. Re-check the extension explicitly.
+# Windows matches 8.3 short names too, so the wildcard '*.log' can return
+# '.log1' and '.logs'. Re-check the extension explicitly.
 if ($Extension) {
     $files = $files | Where-Object { $_.Extension -eq $Extension }
 }
