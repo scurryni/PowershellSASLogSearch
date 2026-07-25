@@ -25,8 +25,16 @@
 
 .PARAMETER Include
     Filename wildcard pattern(s), e.g. 'MI_*' or 'MI_*','RECON_*'.
-    '.log' is appended if the pattern carries no extension. A single pattern is
-    pushed down to the filesystem provider; multiple are matched in memory.
+
+    A pattern carrying no extension is treated as a prefix: -Extension is
+    appended, and so is a trailing '*' if you did not supply one. So
+    'MI_daily_load' finds MI_daily_load.log and MI_daily_load_archive.log alike.
+    Give both a wildcard and an extension ('RECON_*.log') to have the pattern
+    used verbatim instead.
+
+    Every pattern is normalised the same way whether you pass one or several.
+    A lone pattern is also pushed down to the filesystem provider as an
+    optimisation, but the resulting set is identical either way.
 
 .PARAMETER Exclude
     Filename wildcard pattern(s) to skip, e.g. '*_test*','*archive*'.
@@ -187,18 +195,28 @@ $enc = switch ($Encoding) {
 # ---------------------------------------------------------------------------
 # 2. Select the files
 # ---------------------------------------------------------------------------
+# A bare -Include is a prefix, not an exact name: 'MI_daily_load' is meant to
+# find MI_daily_load_archive.log too. Normalise every pattern identically, so a
+# pattern cannot change meaning depending on how many others accompany it.
+function Expand-IncludePattern {
+    param([string]$Pattern, [string]$Ext)
+
+    # Both a wildcard and an extension means the caller was explicit: use as-is.
+    if ($Pattern -match '\.[^.\\/*?]+$' -and $Pattern -match '[*?]') { return $Pattern }
+
+    "$Pattern$(if ($Pattern.EndsWith('*')) { '' } else { '*' })$Ext"
+}
+
+$includePatterns = @(foreach ($p in $Include) { Expand-IncludePattern $p $Extension })
+
 # Provider-level wildcard: the cheapest narrowing available, since it is applied
 # before any file is opened. Derived from -Extension rather than exposed as its
-# own parameter, so the two can never contradict each other.
-$effectiveFilter = if ($Extension) { "*$Extension" } else { '*' }
-
-if ($Include -and $Include.Count -eq 1) {
-    $effectiveFilter = if ($Include[0] -match '\.[^.\\/*?]+$' -and $Include[0] -match '[*?]') {
-        $Include[0]
-    } else {
-        "$($Include[0])$(if ($Include[0].EndsWith('*')) { '' } else { '*' })$Extension"
-    }
-}
+# own parameter, so the two can never contradict each other. A lone -Include can
+# be pushed down to the provider as well; several cannot, so they are matched in
+# memory below. Either way the in-memory pass decides the final set.
+$effectiveFilter = if     ($includePatterns.Count -eq 1) { $includePatterns[0] }
+                   elseif ($Extension)                   { "*$Extension" }
+                   else                                  { '*' }
 
 $gciArgs = @{ LiteralPath = $Path; Filter = $effectiveFilter; File = $true }
 if ($Recurse) { $gciArgs.Recurse = $true }
@@ -212,8 +230,8 @@ if ($Extension) {
     $files = $files | Where-Object { $_.Extension -eq $Extension }
 }
 
-if ($Include -and $Include.Count -gt 1) {
-    $files = $files | Where-Object { $n = $_.Name; ($Include | Where-Object { $n -like $_ }) }
+if ($includePatterns) {
+    $files = $files | Where-Object { $n = $_.Name; ($includePatterns | Where-Object { $n -like $_ }) }
 }
 if ($Exclude)   { $files = $files | Where-Object { $n = $_.Name; -not ($Exclude | Where-Object { $n -like $_ }) } }
 if ($NameRegex) { $files = $files | Where-Object { $_.Name -match $NameRegex } }
