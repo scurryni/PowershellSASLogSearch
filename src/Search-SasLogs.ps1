@@ -24,7 +24,7 @@
     column names which signal fired.
 
 .PARAMETER Include
-    Filename wildcard pattern(s), e.g. 'FCMI_*' or 'FCMI_*','RECON_*'.
+    Filename wildcard pattern(s), e.g. 'MI_*' or 'MI_*','RECON_*'.
     '.log' is appended if the pattern carries no extension. A single pattern is
     pushed down to the filesystem provider; multiple are matched in memory.
 
@@ -34,8 +34,11 @@
 .PARAMETER NameRegex
     Regular expression matched against the filename, applied after -Include.
 
-.PARAMETER Since / -Until
-    Restrict to files whose LastWriteTime falls in the window.
+.PARAMETER Since
+    Restrict to files whose LastWriteTime is at or after this point.
+
+.PARAMETER Until
+    Restrict to files whose LastWriteTime is at or before this point.
 
 .PARAMETER MaxFiles
     Stop after this many files. Combine with -Newest for a representative
@@ -53,11 +56,32 @@
     Guards against the Windows 8.3 quirk where -Filter '*.log' also returns
     '.log1' and '.logs'.
 
+.PARAMETER Filter
+    Raw wildcard handed to the filesystem provider, default '*.log'. This is the
+    cheapest filter available — it narrows the enumeration before any file is
+    opened — but it is also the bluntest, and two things override it:
+
+      - A single -Include replaces it outright. Passing both is not an error and
+        raises no warning; -Include simply wins.
+      - -Extension is re-checked afterwards, so a -Filter that widens past '.log'
+        matches nothing until -Extension is relaxed too:
+            -Filter '*.txt'                 -> no files
+            -Filter '*.txt' -Extension ''   -> works
+
+    Prefer -Include for day-to-day narrowing. Reach for -Filter only when the
+    estate does not use the '.log' extension at all.
+
 .PARAMETER Encoding
     Text encoding of the logs: UTF8 (default), Latin1, ASCII, Unicode, Default.
 
-.PARAMETER Recurse, -CaseSensitive, -Regex
-    Sub-folders; case-sensitive matching; treat -Keyword as regex.
+.PARAMETER Recurse
+    Search sub-folders as well as the top level of -Path.
+
+.PARAMETER CaseSensitive
+    Match case exactly. Off by default.
+
+.PARAMETER Regex
+    Treat each -Keyword as a regular expression rather than a literal string.
 
 .PARAMETER ContextLines
     Lines either side of the match to capture (default 0). Note this switches
@@ -73,10 +97,10 @@
     Suppress the progress bar.
 
 .EXAMPLE
-    .\Search-SasLogs.ps1 -Path 'D:\SAS Logs' -SasIssues -Include 'FCMI_*' -MaxFiles 200 -Newest
+    .\Search-SasLogs.ps1 -Path 'D:\SAS Logs' -SasIssues -Include 'MI_*' -MaxFiles 200 -Newest
 
 .EXAMPLE
-    .\Search-SasLogs.ps1 -Path 'D:\SAS Logs' -Keyword 'libname' -Include 'FCMI_*' -CsvPath 'C:\Temp\hits.csv'
+    .\Search-SasLogs.ps1 -Path 'D:\SAS Logs' -Keyword 'libname' -Include 'MI_*' -CsvPath 'C:\Temp\hits.csv'
 
 .EXAMPLE
     .\Search-SasLogs.ps1 -Path 'D:\SAS Logs' -SasIssues -PassThru |

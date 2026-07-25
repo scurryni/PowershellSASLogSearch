@@ -102,7 +102,7 @@ Describe 'Search-SasLogs' {
     Context 'File selection' {
         It 'honours -Include' {
             $r = Invoke-Search @{ SasIssues = $true; Include = 'MI_*' }
-            $r.File | ForEach-Object { $_ | Should -BeLike 'FC_*' }
+            $r.File | ForEach-Object { $_ | Should -BeLike 'MI_*' }
         }
 
         It 'honours several -Include patterns' {
