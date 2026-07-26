@@ -13,6 +13,7 @@ console, a CSV, or the pipeline.
 | Path | Holds |
 | --- | --- |
 | `src/` | [`Search-SasLogs.ps1`](src/Search-SasLogs.ps1) — the script. |
+| `tools/` | [`Check-LogEncoding.ps1`](tools/Check-LogEncoding.ps1) — reports what encoding your logs actually use. |
 | `samples/logs/` | Small sanitised SAS 9 logs covering every issue rule, for tests and demos. |
 | `tests/` | Pester tests that run against `samples/logs`. No SAS estate needed. |
 | `docs/` | [`rules.md`](docs/rules.md) — what each `-SasIssues` rule matches and why. |
@@ -79,6 +80,27 @@ Then:
 ```powershell
 Invoke-Pester -Path .\tests
 ```
+
+## Checking the encoding first
+
+`-Encoding` defaults to `UTF8`. Reading a `wlatin1` log as UTF-8 does not raise an
+error — the bytes are silently replaced — so a line containing an accent or a
+currency symbol quietly fails to match and the log looks clean. Check before you
+trust a sweep:
+
+```powershell
+.\tools\Check-LogEncoding.ps1 -Path 'S:\SAS Logs' -Include 'FC_*.log' | Format-Table -AutoSize
+```
+
+```
+Name                KB BOM  Endings Encoding       Suggested
+----                -- ---  ------- --------       ---------
+FC_daily.log 412 none CRLF    ANSI / wlatin1 Latin1
+```
+
+Pass the `Suggested` value to `-Encoding`. `(any)` means the logs are plain ASCII and
+the setting makes no difference — the common case, and worth confirming once per
+estate rather than assuming.
 
 ## Running against a live folder
 
