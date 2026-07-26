@@ -456,6 +456,60 @@ Describe 'Search-SasLogs' {
         }
     }
 
+    Context 'Concurrent access' {
+        BeforeAll {
+            $script:Live = Join-Path ([System.IO.Path]::GetTempPath()) "saslogs_live_$(New-Guid)"
+            New-Item -ItemType Directory -Path $script:Live -Force | Out-Null
+        }
+        AfterAll {
+            Remove-Item -LiteralPath $script:Live -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        It 'reads a log its writer still holds open' {
+            # A SAS job keeps its log open for the life of the run. Opening with
+            # FileShare.Read would fail here, which is what used to happen.
+            $p  = Join-Path $script:Live 'inflight.log'
+            $fs = [System.IO.FileStream]::new($p, [System.IO.FileMode]::Create,
+                    [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+            $w  = [System.IO.StreamWriter]::new($fs)
+            try {
+                $w.WriteLine('ERROR: job still in flight'); $w.Flush()
+                $r = Invoke-Search @{ Path = $script:Live; SasIssues = $true; Include = 'inflight' }
+                $r.File | Should -Contain 'inflight.log'
+            }
+            finally { $w.Dispose(); $fs.Dispose() }
+        }
+
+        It 'releases the handle as soon as a capped read stops early' {
+            # -MaxMatchesPerFile breaks out of the read loop. PowerShell does not
+            # dispose an enumerator on break, so without an explicit finally the
+            # log stays locked until the garbage collector runs. No GC here: the
+            # delete has to succeed on its own.
+            $p = Join-Path $script:Live 'capped.log'
+            Set-Content -LiteralPath $p -Value (1..200 | ForEach-Object { "ERROR: problem $_" })
+
+            Invoke-Search @{ Path = $script:Live; SasIssues = $true
+                             Include = 'capped'; MaxMatchesPerFile = 2 } | Out-Null
+
+            { Remove-Item -LiteralPath $p -ErrorAction Stop } | Should -Not -Throw
+        }
+
+        It 'skips a file locked exclusively and carries on with the rest' {
+            $ok = Join-Path $script:Live 'readable.log'
+            Set-Content -LiteralPath $ok -Value 'ERROR: readable'
+            $fs = [System.IO.FileStream]::new((Join-Path $script:Live 'exclusive.log'),
+                    [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write,
+                    [System.IO.FileShare]::None)
+            try {
+                $r = Invoke-Search @{ Path = $script:Live; SasIssues = $true
+                                      Include = 'readable', 'exclusive' } 3>$null
+                $r.File | Should -Contain 'readable.log'
+                $r.File | Should -Not -Contain 'exclusive.log'
+            }
+            finally { $fs.Dispose() }
+        }
+    }
+
     Context 'Empty folder' {
         It 'warns and returns nothing' {
             Invoke-Search @{ Path = (Join-Path $script:Fixture 'empty'); SasIssues = $true } 3>$null |

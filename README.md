@@ -4,7 +4,9 @@ A PowerShell script that searches a folder of SAS 9 logs for keywords, or scans 
 for the standard SAS trouble signals, and reports the file and line number of every hit.
 
 It is purely observational: logs are opened read-only and nothing is written back to
-the log folder. Results go to the console, a CSV, or the pipeline.
+the log folder. It also stays out of everyone else's way — see
+[Running against a live folder](#running-against-a-live-folder). Results go to the
+console, a CSV, or the pipeline.
 
 ## Layout
 
@@ -77,6 +79,35 @@ Then:
 ```powershell
 Invoke-Pester -Path .\tests
 ```
+
+## Running against a live folder
+
+Safe to point at a folder that jobs are still writing to.
+
+Logs are opened read-only **and shared for writing and deletion**. While a file is
+being read, another process can still append to it, rename it, move it or delete it.
+A rotation task, a backup agent or a running SAS job will not hit a sharing error
+because of this script. A log that is still being written gets scanned rather than
+skipped — the default `FileShare.Read` that most PowerShell file reads use would
+have locked it out in both directions.
+
+Two consequences worth knowing:
+
+- **A log read mid-write is read as far as it had got.** Anything written after the
+  read passes is not seen, so a job that fails later can look clean. To sweep only
+  settled logs, exclude anything touched recently:
+
+  ```powershell
+  .\src\Search-SasLogs.ps1 -Path 'D:\SAS Logs' -SasIssues -Until (Get-Date).AddMinutes(-5)
+  ```
+
+- **File selection is a snapshot.** Files are enumerated and filtered first, then
+  read. Anything arriving after the sweep starts is simply not in that run — no
+  error, no warning. `LogDate` is the timestamp as at enumeration.
+
+A file locked exclusively by another process is still skipped, with a warning and a
+count in the summary line. An empty result and a skipped file look the same in the
+output, so check the `(N file(s) unreadable)` suffix on a sweep you intend to trust.
 
 ## Notes on performance
 

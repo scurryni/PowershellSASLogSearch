@@ -7,6 +7,13 @@
     Purely observational: opens files read-only, writes nothing back to the log
     folder. Results print to the console, or go to a CSV at a location you choose.
 
+    Deliberately unobtrusive with it. Logs are opened sharing write and delete,
+    so a job still writing its log can be scanned rather than skipped, and a
+    rotation task or backup agent can move, delete or append to a file while
+    this script is reading it. Note the flip side: a log read mid-write is read
+    as far as it had got, so anything written afterwards is not seen. Add
+    -Until (Get-Date).AddMinutes(-5) to restrict a sweep to settled logs.
+
     Built for large estates. All patterns are compiled into a single .NET regex
     and each file is streamed line by line, so a line that does not match costs
     almost nothing. File selection is narrowed by name, age or count before any
@@ -274,14 +281,44 @@ foreach ($f in $files) {
             -PercentComplete ([math]::Round(($i / $files.Count) * 100, 1))
     }
 
+    $reader = $null
     try {
-        # Streaming when no context is needed; whole-file read only when it is.
-        $lines   = if ($ContextLines -gt 0) { [System.IO.File]::ReadAllLines($f.FullName, $enc) }
-                   else                     { [System.IO.File]::ReadLines($f.FullName, $enc) }
+        # Share the file as widely as a reader can. FileShare.Read - what
+        # File::ReadLines uses - locks out anything holding a write handle, so a
+        # SAS job still writing its log cannot be read at all, and while this
+        # script reads a settled log no other process can append to, rename or
+        # delete it. Adding Write and Delete keeps a running job, a rotation
+        # task and a backup agent all working undisturbed.
+        $stream = [System.IO.FileStream]::new(
+            $f.FullName,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+        $reader = [System.IO.StreamReader]::new($stream, $enc)
+
+        # -ContextLines needs to look either side of a hit, so it buffers the
+        # whole file. Without it the file is streamed and a line that does not
+        # match costs almost nothing.
+        $buffer = $null
+        if ($ContextLines -gt 0) {
+            $collected = [System.Collections.Generic.List[string]]::new()
+            while ($null -ne ($bufLine = $reader.ReadLine())) { $collected.Add($bufLine) }
+            $buffer = $collected.ToArray()
+        }
+
         $lineNo  = 0
         $hits    = 0
 
-        foreach ($line in $lines) {
+        while ($true) {
+            if ($ContextLines -gt 0) {
+                if ($lineNo -ge $buffer.Count) { break }
+                $line = $buffer[$lineNo]
+            }
+            else {
+                $line = $reader.ReadLine()
+                if ($null -eq $line) { break }
+            }
+
             $lineNo++
             $m = $rx.Match($line)
             if (-not $m.Success) { continue }
@@ -294,9 +331,9 @@ foreach ($f in $files) {
             $before = ''; $after = ''
             if ($ContextLines -gt 0) {
                 $lo = [math]::Max(0, $lineNo - 1 - $ContextLines)
-                $hi = [math]::Min($lines.Count - 1, $lineNo - 1 + $ContextLines)
-                if ($lineNo - 2 -ge $lo) { $before = ($lines[$lo..($lineNo - 2)]) -join "`n" }
-                if ($hi -ge $lineNo)     { $after  = ($lines[$lineNo..$hi])       -join "`n" }
+                $hi = [math]::Min($buffer.Count - 1, $lineNo - 1 + $ContextLines)
+                if ($lineNo - 2 -ge $lo) { $before = ($buffer[$lo..($lineNo - 2)]) -join "`n" }
+                if ($hi -ge $lineNo)     { $after  = ($buffer[$lineNo..$hi])       -join "`n" }
             }
 
             $results.Add([pscustomobject]@{
@@ -321,6 +358,13 @@ foreach ($f in $files) {
     catch {
         $skipped++
         Write-Warning "Skipped '$($f.Name)': $($_.Exception.Message)"
+    }
+    finally {
+        # Deterministic close, so the handle is gone the moment this file is
+        # done. PowerShell does not dispose an enumerator when you break out of
+        # a foreach, so -MaxMatchesPerFile used to leave the log held open until
+        # the garbage collector got round to it.
+        if ($reader) { $reader.Dispose() }
     }
 }
 if (-not $NoProgress) { Write-Progress -Activity 'Searching SAS logs' -Completed }
